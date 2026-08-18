@@ -5,12 +5,12 @@ receive file -> extract -> validate/recompute -> check anomalies -> write ledger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.config import Settings, get_settings
-from app.dependencies import get_sheets_client
+from app.dependencies import get_sheets_client, require_passphrase
 from app.models.invoice import ProcessInvoiceResult
 from app.services import anomaly, extraction, history, ledger, validation
 from app.services.sheets_client import SheetsClient
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_passphrase)])
 
 
 @router.post("/api/invoices", response_model=ProcessInvoiceResult)

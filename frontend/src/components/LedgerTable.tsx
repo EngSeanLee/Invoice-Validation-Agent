@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchLedger } from "../api/client";
+import { AuthError, fetchLedger } from "../api/client";
 import type { LedgerRecord } from "../types";
 import FlaggedItemDetail from "./FlaggedItemDetail";
 import StatusBadge from "./StatusBadge";
@@ -16,6 +16,10 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
     try {
       setRecords(await fetchLedger());
     } catch (err) {
+      if (err instanceof AuthError) {
+        window.location.reload();
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load ledger.");
     } finally {
       setIsLoading(false);
@@ -28,6 +32,9 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey]);
 
   const hasSynthetic = records.some((r) => r.source === "Synthetic");
+  const cleanCount = records.filter((r) => r.status === "Clean").length;
+  const flaggedCount = records.filter((r) => r.status === "Flagged").length;
+  const resolvedCount = records.filter((r) => r.status === "Resolved").length;
 
   return (
     <section>
@@ -37,6 +44,27 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
           {isLoading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      {records.length > 0 && (
+        <div className="ledger-stats">
+          <div className="stat-tile">
+            <span className="stat-value">{records.length}</span>
+            <span className="stat-label">Total</span>
+          </div>
+          <div className="stat-tile stat-clean">
+            <span className="stat-value">{cleanCount}</span>
+            <span className="stat-label">Clean</span>
+          </div>
+          <div className="stat-tile stat-flagged">
+            <span className="stat-value">{flaggedCount}</span>
+            <span className="stat-label">Flagged</span>
+          </div>
+          <div className="stat-tile stat-resolved">
+            <span className="stat-value">{resolvedCount}</span>
+            <span className="stat-label">Resolved</span>
+          </div>
+        </div>
+      )}
 
       {hasSynthetic && (
         <p className="synthetic-banner">
@@ -80,10 +108,17 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
               <td>{record.source === "Synthetic" ? <span className="muted">Synthetic</span> : "Real"}</td>
             </tr>
           ))}
-          {records.length === 0 && !isLoading && (
+          {records.length === 0 && isLoading && (
             <tr>
               <td colSpan={8} className="muted">
-                No invoices yet. Upload one to get started.
+                Loading…
+              </td>
+            </tr>
+          )}
+          {records.length === 0 && !isLoading && (
+            <tr>
+              <td colSpan={8} className="empty-state">
+                No invoices yet — head to the Upload tab to process your first one.
               </td>
             </tr>
           )}

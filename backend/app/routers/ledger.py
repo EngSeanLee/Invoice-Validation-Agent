@@ -2,12 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.dependencies import get_sheets_client
+from app.dependencies import get_sheets_client, require_passphrase
 from app.models.ledger import LedgerRecord, ResolveRequest
 from app.services import ledger as ledger_service
 from app.services.sheets_client import SheetsClient
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_passphrase)])
 
 
 @router.get("/api/ledger")

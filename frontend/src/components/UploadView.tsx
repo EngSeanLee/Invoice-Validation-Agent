@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { uploadInvoice } from "../api/client";
+import { AuthError, uploadInvoice } from "../api/client";
 import type { ProcessInvoiceResult } from "../types";
 import StatusBadge from "./StatusBadge";
 
@@ -34,6 +34,7 @@ async function runWithConcurrencyLimit<T>(
 export default function UploadView({ onProcessed }: { onProcessed: () => void }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function updateItem(id: string, patch: Partial<QueueItem>) {
@@ -57,6 +58,10 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
         const result = await uploadInvoice(item.file);
         updateItem(item.id, { status: "done", result });
       } catch (err) {
+        if (err instanceof AuthError) {
+          window.location.reload(); // passphrase rotated/expired mid-session
+          return;
+        }
         updateItem(item.id, {
           status: "error",
           error: err instanceof Error ? err.message : "Upload failed",
@@ -71,8 +76,27 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
 
   return (
     <section>
-      <div className="upload-dropzone">
-        <p>Upload one or more vendor invoices (PDF, PNG, JPG, WEBP).</p>
+      <div
+        className={isDragOver ? "upload-dropzone drag-over" : "upload-dropzone"}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+          handleFilesSelected(e.dataTransfer.files);
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <span className="upload-dropzone-icon" aria-hidden="true">
+          📤
+        </span>
+        <p className="upload-dropzone-title">Drop invoices here, or click to browse</p>
+        <p className="muted">PDF, PNG, JPG, or WEBP — single file or a batch.</p>
         <input
           ref={inputRef}
           type="file"
@@ -80,6 +104,7 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
           accept="application/pdf,image/png,image/jpeg,image/webp"
           disabled={isUploading}
           onChange={(e) => handleFilesSelected(e.target.files)}
+          onClick={(e) => e.stopPropagation()}
         />
       </div>
 
@@ -98,7 +123,12 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
                 <td>{item.file.name}</td>
                 <td>
                   {item.status === "pending" && <span className="muted">Pending…</span>}
-                  {item.status === "processing" && <span className="muted">Processing…</span>}
+                  {item.status === "processing" && (
+                    <span className="processing-indicator">
+                      <span className="spinner" aria-hidden="true" />
+                      Processing…
+                    </span>
+                  )}
                   {item.status === "done" && item.result && (
                     <StatusBadge status={item.result.status} />
                   )}

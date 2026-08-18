@@ -23,10 +23,17 @@ class Settings(BaseSettings):
     sheet_id: str = Field(..., alias="SHEET_ID")
 
     # --- Optional / tunable ---
-    claude_model: str = Field("claude-sonnet-5", alias="CLAUDE_MODEL")
+    # Haiku by default -- invoice extraction is a well-specified structured-JSON
+    # task, not open-ended reasoning, so the cheaper/faster model is the right
+    # default here. Override via CLAUDE_MODEL if you need higher accuracy on
+    # messy scans (e.g. claude-sonnet-5 or claude-opus-5).
+    claude_model: str = Field("claude-haiku-4-5", alias="CLAUDE_MODEL")
     anomaly_zscore_threshold: float = Field(2.0, alias="ANOMALY_ZSCORE_THRESHOLD")
     anomaly_signal_threshold: int = Field(2, alias="ANOMALY_SIGNAL_THRESHOLD")
     cors_allowed_origins: str = Field("http://localhost:5173", alias="CORS_ALLOWED_ORIGINS")
+    # Optional shared-passphrase gate for public deployments (see routers/auth.py
+    # and dependencies.require_passphrase). Unset -> no gate, e.g. local dev.
+    app_passphrase: Optional[str] = Field(None, alias="APP_PASSPHRASE")
 
     @field_validator("anthropic_api_key", "google_service_account_json", "sheet_id")
     @classmethod
@@ -71,11 +78,18 @@ def get_settings() -> Settings:
 
 
 def get_settings_for_tests(**overrides) -> Settings:
-    """Bypass the cached, fail-fast get_settings() for unit tests."""
+    """Bypass the cached, fail-fast get_settings() for unit tests.
+
+    Explicitly disables the .env file source (_env_file=None) -- otherwise
+    any field not passed in `overrides` silently falls back to whatever
+    happens to be in the real backend/.env on disk (e.g. a developer's own
+    APP_PASSPHRASE), making test behavior depend on local machine state
+    instead of being hermetic.
+    """
     defaults = {
         "ANTHROPIC_API_KEY": "test-key",
         "GOOGLE_SERVICE_ACCOUNT_JSON": '{"type": "service_account"}',
         "SHEET_ID": "test-sheet-id",
     }
     defaults.update(overrides)
-    return Settings(**defaults)
+    return Settings(_env_file=None, **defaults)

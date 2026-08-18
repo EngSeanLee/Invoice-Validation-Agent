@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { resolveFlag } from "../api/client";
+import { AuthError, resolveFlag } from "../api/client";
 import type { LedgerRecord } from "../types";
 
 export default function FlaggedItemDetail({
@@ -26,6 +26,10 @@ export default function FlaggedItemDetail({
       const updated = await resolveFlag(record.id, reviewer.trim());
       onResolved(updated);
     } catch (err) {
+      if (err instanceof AuthError) {
+        window.location.reload();
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to resolve.");
     } finally {
       setIsSubmitting(false);

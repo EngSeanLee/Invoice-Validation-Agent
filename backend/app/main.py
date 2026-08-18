@@ -1,44 +1,23 @@
 """FastAPI entrypoint. Config is validated eagerly (see app/config.py) so a
 missing ANTHROPIC_API_KEY / GOOGLE_SERVICE_ACCOUNT_JSON / SHEET_ID fails fast
-with a clear message instead of an obscure error on the first request. The
-Google Sheets connection itself is verified at startup (lifespan), before the
-app starts serving traffic.
-"""
+with a clear message instead of an obscure error on the first request.
 
-import sys
-from contextlib import asynccontextmanager
+The Google Sheets connection is built lazily on first use (see
+dependencies.get_sheets_client), not at app startup -- this works the same way
+under a long-lived local `uvicorn` process and under a serverless host (e.g.
+Vercel) where each cold-started instance handles its own first request without
+relying on a startup/lifespan hook.
+"""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import invoices, ledger
-from app.services.sheets_client import GoogleSheetsClient
+from app.routers import auth, invoices, ledger
 
 settings = get_settings()  # fails fast (SystemExit) if required env vars are missing
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        service_account_info = settings.resolve_service_account_info()
-        sheets_client = GoogleSheetsClient(settings.sheet_id, service_account_info)
-        sheets_client.ensure_headers()
-    except Exception as exc:
-        print(
-            f"\nFailed to connect to the Google Sheets ledger: {exc}\n"
-            "Check GOOGLE_SERVICE_ACCOUNT_JSON and SHEET_ID, and confirm the "
-            "target Sheet is shared with the service account's client_email as "
-            "Editor. See the README's 'Google Cloud service account setup' section.\n",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from exc
-
-    app.state.sheets_client = sheets_client
-    yield
-
-
-app = FastAPI(title="Invoice Validation Agent", lifespan=lifespan)
+app = FastAPI(title="Invoice Validation Agent")
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(invoices.router)
 app.include_router(ledger.router)
 
