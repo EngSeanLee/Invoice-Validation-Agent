@@ -109,6 +109,7 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
       </div>
 
       {queue.length > 0 && (
+        <div className="table-scroll">
         <table className="upload-table">
           <thead>
             <tr>
@@ -150,6 +151,7 @@ export default function UploadView({ onProcessed }: { onProcessed: () => void })
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );

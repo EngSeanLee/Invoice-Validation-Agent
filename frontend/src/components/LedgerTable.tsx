@@ -75,6 +75,7 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
 
       {error && <p className="error-text">{error}</p>}
 
+      <div className="table-scroll">
       <table className="ledger-table">
         <thead>
           <tr>
@@ -124,6 +125,7 @@ export default function LedgerTable({ refreshKey }: { refreshKey: number }) {
           )}
         </tbody>
       </table>
+      </div>
 
       {selected && (
         <FlaggedItemDetail

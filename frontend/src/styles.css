@@ -288,14 +288,19 @@ input[type="password"]:focus {
 
 /* ---------- Tables ---------- */
 
+/* Wide tables scroll within this container instead of overflowing the page
+   body horizontally on narrow/mobile viewports. */
+.table-scroll {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   background: var(--color-surface);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--color-border);
 }
 
 th,
