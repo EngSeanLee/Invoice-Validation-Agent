@@ -107,3 +107,37 @@ def test_clean_invoice_with_established_history_is_not_flagged(sample_extraction
 
     assert flags == []
     assert is_flagged is False
+
+
+def test_amount_signals_compare_against_recomputed_total_not_raw_extraction(sample_extraction, settings):
+    # Regression test: amount-based signals must judge the invoice against
+    # the recomputed (canonical) total, never the model's raw extracted
+    # total -- otherwise a bogus printed total pollutes z-score/trend checks
+    # even though validation.py already knows not to trust it.
+    bad = copy.deepcopy(sample_extraction)
+    bad.total = 99999.0  # wildly wrong raw total; recomputed total stays 135.0
+    validated = recompute_totals(bad)
+    assert validated.recomputed_total == 135.0
+
+    # Established vendor history clustered right around the *recomputed*
+    # total -- if the z-score signal used the raw 99999.0 it would fire hard.
+    history_records = [
+        LedgerRecord(
+            id=f"h{i}", vendor_name=bad.vendor_name, invoice_number=f"H{i}",
+            invoice_date=dt.date(2026, 1, i + 1), total=135.0 + i, category=bad.category,
+            status="Clean", source="Synthetic",
+        )
+        for i in range(5)
+    ]
+    vendor_hist = VendorHistory(vendor_name=bad.vendor_name, invoices=history_records)
+    category_hist = CategoryHistory(category=bad.category, invoices=history_records)
+
+    flags, is_flagged = anomaly.check_anomalies(
+        bad, validated, vendor_hist, category_hist, history_records, settings
+    )
+
+    signal_names = {f.signal for f in flags}
+    assert "amount_above_vendor_avg" not in signal_names
+    assert "category_trend" not in signal_names
+    # math_mismatch still (correctly) fires -- that's a different, honest signal
+    assert "math_mismatch" in signal_names

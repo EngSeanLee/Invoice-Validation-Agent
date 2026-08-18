@@ -40,6 +40,12 @@ class AnomalyContext:
         self.category_history = category_history
         self.all_records = all_records
         self.settings = settings
+        # The recomputed total, not the model's raw extracted total -- every
+        # amount-based signal below must compare against this. Using
+        # extraction.total here would defeat the point of validation.py: an
+        # invoice with wrong printed math would get judged against a number
+        # we already know not to trust.
+        self.canonical_total = validation.recomputed_total
 
 
 SignalFn = Callable[[AnomalyContext], Optional[AnomalyFlag]]
@@ -49,12 +55,12 @@ def signal_amount_above_vendor_avg(ctx: AnomalyContext) -> Optional[AnomalyFlag]
     vh = ctx.vendor_history
     if vh.count < MIN_HISTORY_FOR_ZSCORE or vh.stdev_amount == 0:
         return None  # cold start handled by synthetic seed data, not special-cased here
-    z_score = (ctx.extraction.total - vh.mean_amount) / vh.stdev_amount
+    z_score = (ctx.canonical_total - vh.mean_amount) / vh.stdev_amount
     if z_score >= ctx.settings.anomaly_zscore_threshold:
         return AnomalyFlag(
             signal="amount_above_vendor_avg",
             reason=(
-                f"Total ${ctx.extraction.total:.2f} is {z_score:.1f} standard deviations "
+                f"Total ${ctx.canonical_total:.2f} is {z_score:.1f} standard deviations "
                 f"above {vh.vendor_name}'s historical average (${vh.mean_amount:.2f}, "
                 f"n={vh.count})"
             ),
@@ -87,7 +93,7 @@ def signal_duplicate_invoice(ctx: AnomalyContext) -> Optional[AnomalyFlag]:
                 ),
                 weight=2,  # high confidence -- can flag alone
             )
-        same_amount = abs(r.total - ctx.extraction.total) < 0.01
+        same_amount = abs(r.total - ctx.canonical_total) < 0.01
         same_date = r.invoice_date == ctx.extraction.invoice_date
         if same_amount and same_date:
             return AnomalyFlag(
@@ -107,7 +113,7 @@ def signal_category_trend(ctx: AnomalyContext) -> Optional[AnomalyFlag]:
     ch = ctx.category_history
     month = current_month_key(ctx.extraction.invoice_date)
     monthly_totals = ch.monthly_totals()
-    current_month_total = monthly_totals.get(month, 0.0) + ctx.extraction.total
+    current_month_total = monthly_totals.get(month, 0.0) + ctx.canonical_total
     avg = ch.historical_monthly_average(exclude_month=month)
     if avg <= 0:
         return None

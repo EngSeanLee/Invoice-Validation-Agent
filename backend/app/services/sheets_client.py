@@ -85,6 +85,8 @@ class SheetsClient(Protocol):
 
     def append_record(self, record: LedgerRecord) -> None: ...
 
+    def append_records(self, records: list[LedgerRecord]) -> None: ...
+
     def update_record(self, invoice_id: str, updates: dict) -> Optional[LedgerRecord]: ...
 
 
@@ -132,12 +134,21 @@ class GoogleSheetsClient:
         return [r for r in records if r is not None]
 
     def append_record(self, record: LedgerRecord) -> None:
+        self.append_records([record])
+
+    def append_records(self, records: list[LedgerRecord]) -> None:
+        """Bulk append -- a single API call for N rows. Looping append_record()
+        for a batch (e.g. seeding synthetic history) burns through Sheets'
+        per-minute write-request quota in seconds; this is the only way seed
+        data actually fits under it."""
+        if not records:
+            return
         self._values().append(
             spreadsheetId=self._sheet_id,
             range=f"{SHEET_RANGE_NAME}!A2:K",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
-            body={"values": [_record_to_row(record)]},
+            body={"values": [_record_to_row(r) for r in records]},
         ).execute()
 
     def update_record(self, invoice_id: str, updates: dict) -> Optional[LedgerRecord]:
@@ -182,6 +193,10 @@ class MockSheetsClient:
 
     def append_record(self, record: LedgerRecord) -> None:
         self._records[record.id] = record
+
+    def append_records(self, records: list[LedgerRecord]) -> None:
+        for record in records:
+            self._records[record.id] = record
 
     def update_record(self, invoice_id: str, updates: dict) -> Optional[LedgerRecord]:
         existing = self._records.get(invoice_id)

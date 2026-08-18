@@ -68,8 +68,9 @@ def generate_seed_records() -> list[LedgerRecord]:
 def seed(sheets_client: SheetsClient) -> int:
     sheets_client.ensure_headers()
     records = generate_seed_records()
-    for record in records:
-        sheets_client.append_record(record)
+    # One bulk append call, not N individual ones -- looping append_record()
+    # here blows through Sheets' per-minute write-request quota.
+    sheets_client.append_records(records)
     return len(records)
 
 
